@@ -3,6 +3,12 @@ object Libs {
     const val androidJUnitRunner = "androidx.test.runner.AndroidJUnitRunner"
 
     const val nutrient = "com.pspdfkit:pspdfkit:2024.4.0"
+
+    // Onyx Boox SDK: raw-input pen drawing + device detection / e-ink controls.
+    object Onyx {
+        const val pen = "com.onyx.android.sdk:onyxsdk-pen:1.4.11"
+        const val device = "com.onyx.android.sdk:onyxsdk-device:1.1.11"
+    }
     const val googleServices = "com.google.gms:google-services:4.4.3"
     const val realmGradlePlugin = "io.realm:realm-gradle-plugin:10.19.0"
     const val materialDesign = "com.google.android.material:material:1.12.0"

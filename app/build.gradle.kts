@@ -41,6 +41,8 @@ android {
         buildConfigField("String", "BASE_API_URL", "\"https://api.zotero.org\"")
         buildConfigField("boolean", "EVENT_AND_CRASH_LOGGING_ENABLED", "false")
         buildConfigField("String", "PSPDFKIT_KEY", "\"\"")
+        // Boox pen overlay: only ever active when the runtime "is Boox?" check also passes.
+        buildConfigField("boolean", "BOOX_PEN_OVERLAY_ENABLED", "true")
         manifestPlaceholders["enableCrashReporting"] = false
 
         //Making build version components to be accessible from within the app.
@@ -157,6 +159,10 @@ dependencies {
 
     //PSPDFKIT
     implementation(Libs.nutrient)
+
+    //Onyx Boox pen + device SDK (runtime-gated behind an "is Boox?" check)
+    implementation(Libs.Onyx.pen)
+    implementation(Libs.Onyx.device)
 
     //GSON
     implementation(Libs.gson)

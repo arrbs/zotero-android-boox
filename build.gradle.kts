@@ -31,6 +31,11 @@ allprojects {
         google()
         mavenCentral()
         maven { setUrl("https://jitpack.io") }
+        // Onyx Boox Pen/Device SDK. Served over http only, hence allowInsecureProtocol.
+        maven {
+            isAllowInsecureProtocol = true
+            url = uri("http://repo.boox.com/repository/maven-public/")
+        }
         maven {
             url = uri("https://customers.pspdfkit.com/maven")
         }
