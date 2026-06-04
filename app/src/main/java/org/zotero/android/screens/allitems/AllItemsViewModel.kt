@@ -30,6 +30,7 @@ import org.zotero.android.androidx.content.longToast
 import org.zotero.android.appupdate.UpdateSuggestionUseCase
 import org.zotero.android.architecture.BaseViewModel2
 import org.zotero.android.architecture.Defaults
+import org.zotero.android.boox.BooxDevice
 import org.zotero.android.architecture.EventBusConstants
 import org.zotero.android.architecture.LCE2
 import org.zotero.android.architecture.ScreenArguments
@@ -271,12 +272,22 @@ internal class AllItemsViewModel @Inject constructor(
                     )
                     when (contentType) {
                         "application/pdf" -> {
-                            showPdf(
-                                file = file,
-                                key = attachment.key,
-                                parentKey = parentKey,
-                                library = library
-                            )
+                            if (BooxDevice.isBooxDevice) {
+                                // On Boox, open PDFs in the pdf.js WebView reader (no PSPDFKit).
+                                showHtmlEpub(
+                                    file = file,
+                                    key = attachment.key,
+                                    parentKey = parentKey,
+                                    library = library
+                                )
+                            } else {
+                                showPdf(
+                                    file = file,
+                                    key = attachment.key,
+                                    parentKey = parentKey,
+                                    library = library
+                                )
+                            }
                         }
 
                         "text/html", "text/plain" -> {

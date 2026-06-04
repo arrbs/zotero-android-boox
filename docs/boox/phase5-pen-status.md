@@ -26,7 +26,38 @@ so the project does not compile here. The code is modelled on the documented Ony
 (plan §8) and `ScribbleTouchHelperDemoActivity`; treat the first on-device build as the compile
 check. Risk is concentrated in `BooxPenOverlayView` (Onyx API surface).
 
+## Done — PDF routing + annotation persistence (Phase 3)
+
+**PDFs now route through the WebView reader on Boox** (`BooxDevice.isBooxDevice`):
+- `AllItemsViewModel` / `ItemDetailsViewModel`: `application/pdf` → `showHtmlEpub` (PSPDFKit
+  remains the fallback on non-Boox).
+- Reader plumbing: `Page.pdf`, `CreateReaderViewState.pageIndex`, `defaultPageValue("pdf")`,
+  `loadTypeAndPage("pdf")`, executor `createView(type="pdf")`.
+
+**Annotation persistence (highlight / underline / ink) → synced RItem:**
+- `CreatePdfReaderAnnotationsDbRequest` converts the reader's `position` JSON into embedded
+  `RRect` (highlight/underline) and `RPath` (ink) geometry + `pageIndex`/`width` fields,
+  mirroring `CreatePDFAnnotationsDbRequest` but with no Y-flip (reader emits PDF points already).
+- `HtmlEpubReaderViewModel.createDatabaseAnnotations` picks this request when the doc is a PDF.
+- `RItem.htmlEpubAnnotation` now injects embedded rects/paths back into `position`, so existing
+  PDF annotations round-trip into the reader (no-op for EPUB).
+
+**Boox ink end-to-end:**
+- `BooxPenSpikeOverlay` forwards strokes to `HtmlEpubReaderViewModel.onBooxStrokeDrawn`.
+- The VM runs the stroke through `HtmlEpubReaderWebCallChainExecutor.convertBooxInkStroke`
+  (injected `BooxInkCoordinateBridge` JS → `{pageIndex,width,paths,sortIndex}` in PDF points),
+  builds an ink `HtmlEpubAnnotation`, and persists it. The DB observer renders it back into the
+  reader and the sync engine ships it.
+
 ## Remaining device-gated steps (in order)
+
+0. **Verify the bundled `reader.zip` (android build) supports `type:"pdf"` + create/ink.**
+   If not, build the submodule with PDF enabled (`scripts/bundle_reader_local.sh`). This is now
+   the top risk, since Boox PDF opens route here with no PSPDFKit fallback.
+0b. **Numeric position fields:** `htmlEpubAnnotation` serialises `pageIndex`/`width` as strings
+   (field values are strings). Confirm zotero/reader's PDF view accepts them; if it needs numbers,
+   coerce numeric position primitives in the injection. (Sync to Zotero desktop is already numeric
+   via `createAnnotationPosition`.)
 
 1. **Compile on a machine with the Android SDK + network.** Fix any Onyx signature drift
    (likely candidates: exact `RawInputCallback` abstract method set for 1.4.11; `setLimitRect`

@@ -84,9 +84,14 @@ internal fun HtmlEpubReaderBox(
         }
 
         HtmlEpubReaderWebView(viewModel)
-        // Boox pen capture overlay (Phase 5 spike). No-op on non-Boox hardware; defaults to
-        // HIGHLIGHT pass-through so reading is unaffected until the user switches to Draw.
-        BooxPenSpikeOverlay(modifier = Modifier.fillMaxSize())
+        // Boox pen overlay. No-op on non-Boox hardware; defaults to HIGHLIGHT pass-through so
+        // reading is unaffected until the user switches to Draw. Strokes only become ink on PDFs
+        // (the VM guards on document type).
+        BooxPenSpikeOverlay(
+            modifier = Modifier.fillMaxSize(),
+            onDrawStroke = { stroke -> viewModel.onBooxStrokeDrawn(stroke) },
+            onEraseStroke = { stroke -> viewModel.onBooxStrokeErased(stroke) },
+        )
         if (viewState.showCreationToolbar) {
             HtmlEpubReaderAnnotationCreationToolbar(
                 viewState = viewState,

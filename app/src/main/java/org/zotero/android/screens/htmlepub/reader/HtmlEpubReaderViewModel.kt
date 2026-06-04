@@ -50,7 +50,10 @@ import org.zotero.android.database.objects.AnnotationsConfig
 import org.zotero.android.database.objects.FieldKeys
 import org.zotero.android.database.objects.RItem
 import org.zotero.android.database.objects.UpdatableChangeType
+import org.zotero.android.boox.BooxDevice
+import org.zotero.android.boox.BooxInkStroke
 import org.zotero.android.database.requests.CreateHtmlEpubAnnotationsDbRequest
+import org.zotero.android.database.requests.CreatePdfReaderAnnotationsDbRequest
 import org.zotero.android.database.requests.EditItemFieldsDbRequest
 import org.zotero.android.database.requests.EditTagsForItemDbRequest
 import org.zotero.android.database.requests.MarkObjectsAsDeletedDbRequest
@@ -586,14 +589,24 @@ class HtmlEpubReaderViewModel @Inject constructor(
     }
 
     private fun createDatabaseAnnotations(annotations: List<HtmlEpubAnnotation>) {
-        val request = CreateHtmlEpubAnnotationsDbRequest(
-            attachmentKey = viewState.key,
-            libraryId = viewState.library.identifier,
-            annotations = annotations,
-            userId = this.userId,
-            schemaController = schemaController,
-            gson = gson,
-        )
+        val request = if (isPdf) {
+            CreatePdfReaderAnnotationsDbRequest(
+                attachmentKey = viewState.key,
+                libraryId = viewState.library.identifier,
+                annotations = annotations,
+                userId = this.userId,
+                schemaController = schemaController,
+            )
+        } else {
+            CreateHtmlEpubAnnotationsDbRequest(
+                attachmentKey = viewState.key,
+                libraryId = viewState.library.identifier,
+                annotations = annotations,
+                userId = this.userId,
+                schemaController = schemaController,
+                gson = gson,
+            )
+        }
         viewModelScope.launch {
             perform(
                 dbWrapper = dbWrapperMain,
@@ -974,11 +987,92 @@ class HtmlEpubReaderViewModel @Inject constructor(
             "html", "htm" -> {
                 return "0"
             }
+            "pdf" -> {
+                return "0"
+            }
             else -> {
                 return ""
             }
         }
     }
+
+    /** PDFs are rendered through the same WebView reader (Boox path) instead of PSPDFKit. */
+    private val isPdf: Boolean
+        get() = ::documentFile.isInitialized && documentFile.extension.equals("pdf", ignoreCase = true)
+
+    // region Boox pen
+
+    /** True when the Boox pen overlay should feed ink into this (PDF) document. */
+    val isBooxPdfActive: Boolean
+        get() = isPdf && BooxDevice.isBooxDevice
+
+    /**
+     * Handle a finished Boox draw stroke: convert overlay px -> PDF points via the WebView
+     * coordinate bridge, then persist as an ink annotation. The DB observer renders it back into
+     * the reader and the sync engine ships it like any other annotation.
+     */
+    fun onBooxStrokeDrawn(stroke: BooxInkStroke) {
+        if (!isPdf || stroke.isEmpty) return
+        val executor = htmlEpubReaderWebCallChainExecutor ?: return
+        viewModelScope.launch {
+            val convertedJson = executor.convertBooxInkStroke(stroke)
+            if (convertedJson == null) {
+                Timber.w("HtmlEpubReaderViewModel: Boox stroke conversion returned null (stroke off-page?)")
+                return@launch
+            }
+            val annotation = buildBooxInkAnnotation(convertedJson) ?: return@launch
+            createDatabaseAnnotations(listOf(annotation))
+        }
+    }
+
+    fun onBooxStrokeErased(stroke: BooxInkStroke) {
+        // TODO(device): hit-test the eraser stroke against existing ink annotations and delete them
+        // (build plan §6: onRawErasing* -> hit-test + MarkObjectsAsDeletedDbRequest).
+        Timber.d("HtmlEpubReaderViewModel: Boox erase stroke (${stroke.sampleCount} pts) - not yet wired")
+    }
+
+    private fun buildBooxInkAnnotation(convertedJson: String): HtmlEpubAnnotation? {
+        return try {
+            val obj = gson.fromJson(convertedJson, JsonObject::class.java) ?: return null
+            if (obj.has("error")) {
+                Timber.w("HtmlEpubReaderViewModel: Boox ink bridge error - ${obj["error"]?.asString}")
+                return null
+            }
+            val pageIndex = obj["pageIndex"]?.asInt ?: return null
+            val paths = obj["paths"]?.asJsonArray ?: return null
+            if (paths.size() == 0) return null
+            val width = obj["width"]?.asFloat ?: 1f
+            val sortIndex = obj["sortIndex"]?.takeIf { !it.isJsonNull }?.asString
+                ?: String.format("%05d|%06d|%05d", pageIndex, 0, 0)
+
+            val position = JsonObject().apply {
+                addProperty(FieldKeys.Item.Annotation.Position.pageIndex, pageIndex)
+                addProperty(FieldKeys.Item.Annotation.Position.lineWidth, width)
+                add(FieldKeys.Item.Annotation.Position.paths, paths)
+            }
+            val now = Date()
+            HtmlEpubAnnotation(
+                key = KeyGenerator.newKey(),
+                type = AnnotationType.ink,
+                pageLabel = "",
+                position = position,
+                author = this.username,
+                isAuthor = true,
+                color = defaults.getInkColorHex(),
+                comment = "",
+                text = null,
+                sortIndex = sortIndex,
+                dateAdded = now,
+                dateModified = now,
+                tags = emptyList(),
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "HtmlEpubReaderViewModel: failed to build Boox ink annotation")
+            null
+        }
+    }
+
+    // endregion
 
     fun loadTypeAndPage(file: File, rawPage: String): Pair<String, Page?> {
         when (this.documentFile.extension.lowercase()) {
@@ -993,6 +1087,9 @@ class HtmlEpubReaderViewModel @Inject constructor(
                     Timber.e("HtmlEpubReaderViewModel: incompatible lastIndexPage stored for ${viewState.key} - $rawPage")
                     return "snapshot" to null
                 }
+            }
+            "pdf" -> {
+                return "pdf" to Page.pdf(pageIndex = rawPage.toIntOrNull() ?: 0)
             }
             else -> {
                 throw Error.incompatibleDocument

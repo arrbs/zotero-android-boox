@@ -20,4 +20,6 @@ data class CreateReaderViewState(
     val scale: Double? = null,
     //epub
     val cfi: String? = null,
+    //pdf
+    val pageIndex: Int? = null,
 )

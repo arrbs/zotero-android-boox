@@ -662,6 +662,32 @@ open class RItem : Updatable, Deletable, Syncable, RealmObject() {
                 }
             }
         }
+
+        // PDF annotations store geometry as embedded rects/paths objects rather than as position
+        // fields, so inject them into the position the reader receives. No-op for HTML/EPUB, whose
+        // rects/paths lists are empty.
+        if (this.rects.isNotEmpty()) {
+            val rectArray = JsonArray()
+            this.rects.forEach { rRect ->
+                val coords = JsonArray()
+                coords.add(rRect.minX)
+                coords.add(rRect.minY)
+                coords.add(rRect.maxX)
+                coords.add(rRect.maxY)
+                rectArray.add(coords)
+            }
+            position.add(FieldKeys.Item.Annotation.Position.rects, rectArray)
+        }
+        if (this.paths.isNotEmpty()) {
+            val pathArray = JsonArray()
+            this.paths.sortedBy { it.sortIndex }.forEach { rPath ->
+                val flat = JsonArray()
+                rPath.coordinates.sortedBy { it.sortIndex }.forEach { flat.add(it.value) }
+                pathArray.add(flat)
+            }
+            position.add(FieldKeys.Item.Annotation.Position.paths, pathArray)
+        }
+
         if (type == null || sortIndex == null || position.isEmpty()) {
             Timber.e("RItem: can't create html/epub annotation, type=${type};sortIndex=${sortIndex};position=${position}")
             return null

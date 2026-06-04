@@ -14,6 +14,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,11 +36,24 @@ import timber.log.Timber
  * step and belongs in the reader ViewModel, which owns the WebView handle and the annotation store.
  */
 @Composable
-fun BooxPenSpikeOverlay(modifier: Modifier = Modifier) {
+fun BooxPenSpikeOverlay(
+    modifier: Modifier = Modifier,
+    onDrawStroke: (BooxInkStroke) -> Unit = { stroke ->
+        Timber.i(
+            "BooxPenSpike: draw stroke samples=${stroke.sampleCount} " +
+                "pressureRatio=${stroke.medianPressureRatio()}",
+        )
+    },
+    onEraseStroke: (BooxInkStroke) -> Unit = { stroke ->
+        Timber.i("BooxPenSpike: erase stroke samples=${stroke.sampleCount}")
+    },
+) {
     if (!BooxDevice.isBooxDevice) return
 
     var controller by remember { mutableStateOf<BooxPenController?>(null) }
     var mode by remember { mutableStateOf(PenMode.HIGHLIGHT) }
+    val currentOnDraw by rememberUpdatedState(onDrawStroke)
+    val currentOnErase by rememberUpdatedState(onEraseStroke)
 
     Box(modifier = modifier.fillMaxSize()) {
         AndroidView(
@@ -52,15 +66,8 @@ fun BooxPenSpikeOverlay(modifier: Modifier = Modifier) {
                 )
                 controller = BooxPenController(
                     overlay = overlay,
-                    onDrawStroke = { stroke ->
-                        Timber.i(
-                            "BooxPenSpike: draw stroke samples=${stroke.sampleCount} " +
-                                "pressureRatio=${stroke.medianPressureRatio()}",
-                        )
-                    },
-                    onEraseStroke = { stroke ->
-                        Timber.i("BooxPenSpike: erase stroke samples=${stroke.sampleCount}")
-                    },
+                    onDrawStroke = { stroke -> currentOnDraw(stroke) },
+                    onEraseStroke = { stroke -> currentOnErase(stroke) },
                 )
                 overlay
             },

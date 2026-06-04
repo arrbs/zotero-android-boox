@@ -13,6 +13,8 @@ import org.zotero.android.ZoteroApplication
 import org.zotero.android.architecture.Result
 import org.zotero.android.architecture.core.EventStream
 import org.zotero.android.architecture.coroutines.Dispatchers
+import org.zotero.android.boox.BooxInkCoordinateBridge
+import org.zotero.android.boox.BooxInkStroke
 import org.zotero.android.files.FileStore
 import org.zotero.android.screens.htmlepub.reader.CreateReaderLocation
 import org.zotero.android.screens.htmlepub.reader.CreateReaderViewOptions
@@ -37,6 +39,8 @@ class HtmlEpubReaderWebCallChainExecutor(
 ) {
 
     private lateinit var htmlEpubReaderWebViewHandler: HtmlEpubReaderWebViewHandler
+
+    private val booxInkCoordinateBridge = BooxInkCoordinateBridge(gson)
 
     private val limitedParallelismDispatcher =
         kotlinx.coroutines.Dispatchers.IO.limitedParallelism(1)
@@ -218,10 +222,33 @@ class HtmlEpubReaderWebCallChainExecutor(
     }
 
     private fun onIndexHtmlLoaded() {
+        // Inject the Boox stroke -> PDF-point conversion helper (no-op until a stroke is converted).
+        htmlEpubReaderWebViewHandler.evaluateJavascript(BooxInkCoordinateBridge.INK_TO_PDF_DEFINITION) {}
         observable.emitAsync(
             Result.Success(
                 HtmlEpubReaderWebData.loadDocument)
         )
+    }
+
+    /**
+     * Converts a captured Boox stroke (overlay px) into a Zotero ink annotation in PDF points by
+     * running [BooxInkCoordinateBridge]'s JS inside the reader. Returns the JSON string
+     * `{ pageIndex, width, paths, sortIndex }` or null if the conversion failed (e.g. the stroke
+     * did not start over a page). Build plan §7 coordinate gate.
+     */
+    suspend fun convertBooxInkStroke(stroke: BooxInkStroke): String? {
+        val js = booxInkCoordinateBridge.buildConvertCall(stroke)
+        return suspendCancellableCoroutine { cont ->
+            htmlEpubReaderWebViewHandler.evaluateJavascript(js) { result ->
+                // evaluateJavascript returns the value JSON-encoded (quoted) or the literal "null".
+                val unwrapped = if (result == "null" || result.isBlank()) {
+                    null
+                } else {
+                    runCatching { gson.fromJson(result, String::class.java) }.getOrNull() ?: result
+                }
+                cont.resume(unwrapped)
+            }
+        }
     }
 
     suspend fun selectInDocument(key: String) {
@@ -325,6 +352,9 @@ class HtmlEpubReaderWebCallChainExecutor(
                 }
                 is Page.epub -> {
                     createReaderViewOptions.viewState = CreateReaderViewState(cfi = page.cfi)
+                }
+                is Page.pdf -> {
+                    createReaderViewOptions.viewState = CreateReaderViewState(pageIndex = page.pageIndex)
                 }
             }
         }

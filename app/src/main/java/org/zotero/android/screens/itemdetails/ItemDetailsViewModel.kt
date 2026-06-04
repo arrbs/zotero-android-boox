@@ -32,6 +32,7 @@ import org.joda.time.DateTime
 import org.zotero.android.api.pojo.sync.KeyBaseKeyPair
 import org.zotero.android.architecture.BaseViewModel2
 import org.zotero.android.architecture.Defaults
+import org.zotero.android.boox.BooxDevice
 import org.zotero.android.architecture.EventBusConstants
 import org.zotero.android.architecture.Result
 import org.zotero.android.architecture.ScreenArguments
@@ -1672,7 +1673,12 @@ class ItemDetailsViewModel @Inject constructor(
                 )
                 when (contentType) {
                     "application/pdf" -> {
-                        showPdf(file = file, parentKey = parentKey, attachment = attachment)
+                        if (BooxDevice.isBooxDevice) {
+                            // On Boox, open PDFs in the pdf.js WebView reader (no PSPDFKit).
+                            showHtmlEpub(file = file, parentKey = parentKey, attachment = attachment)
+                        } else {
+                            showPdf(file = file, parentKey = parentKey, attachment = attachment)
+                        }
                     }
                     "text/html", "text/plain" -> {
                         val url = file.toUri().toString()

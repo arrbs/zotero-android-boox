@@ -79,20 +79,30 @@ class BooxInkCoordinateBridge(private val gson: Gson = Gson()) {
                     : (firstEl.__pdfViewport || null);
 
                   var path = [];
+                  var maxY = -Infinity;
                   for (var j = 0; j + 1 < pts.length; j += 2) {
                     var canvasX = pts[j] - rect.left;
                     var canvasY = pts[j + 1] - rect.top;
                     if (viewport && viewport.convertToPdfPoint) {
                       var p = viewport.convertToPdfPoint(canvasX, canvasY);
                       path.push(p[0], p[1]);
+                      if (p[1] > maxY) maxY = p[1];
                     } else {
                       // Fallback: no viewport found — return canvas px so native can log the gap.
                       path.push(canvasX, canvasY);
                     }
                   }
 
+                  // Zotero sortIndex: "pageIndex(5)|charOffset(6)|yOffset(5)", yOffset from page top.
+                  function pad(n, len) { n = String(Math.max(0, Math.round(n))); while (n.length < len) n = '0' + n; return n; }
+                  var sortIndex = null;
+                  if (viewport && viewport.viewBox && isFinite(maxY)) {
+                    var pageHeight = viewport.viewBox[3] - viewport.viewBox[1];
+                    sortIndex = pad(pageIndex, 5) + '|' + pad(0, 6) + '|' + pad(pageHeight - maxY, 5);
+                  }
+
                   var width = (data.pressureRatio || 0.5) * (data.widthFactor || 3.0);
-                  return JSON.stringify({ pageIndex: pageIndex, width: width, paths: [path] });
+                  return JSON.stringify({ pageIndex: pageIndex, width: width, paths: [path], sortIndex: sortIndex });
                 } catch (e) {
                   return JSON.stringify({ error: String(e) });
                 }
