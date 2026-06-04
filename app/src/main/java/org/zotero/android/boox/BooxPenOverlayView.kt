@@ -8,9 +8,9 @@ import android.os.Looper
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.onyx.android.sdk.api.device.epd.EpdController
+import com.onyx.android.sdk.data.note.TouchPoint
 import com.onyx.android.sdk.pen.RawInputCallback
 import com.onyx.android.sdk.pen.TouchHelper
-import com.onyx.android.sdk.pen.data.TouchPoint
 import com.onyx.android.sdk.pen.data.TouchPointList
 import timber.log.Timber
 

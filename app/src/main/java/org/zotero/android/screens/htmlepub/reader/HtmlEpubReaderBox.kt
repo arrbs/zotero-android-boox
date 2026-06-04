@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import org.zotero.android.boox.BooxPenSpikeOverlay
 import org.zotero.android.screens.htmlepub.reader.web.actionmenu.HtmlEpubActionMenuPopup
 import org.zotero.android.screens.htmlepub.toolbar.HtmlEpubReaderAnnotationCreationToolbar
 
@@ -83,6 +84,9 @@ internal fun HtmlEpubReaderBox(
         }
 
         HtmlEpubReaderWebView(viewModel)
+        // Boox pen capture overlay (Phase 5 spike). No-op on non-Boox hardware; defaults to
+        // HIGHLIGHT pass-through so reading is unaffected until the user switches to Draw.
+        BooxPenSpikeOverlay(modifier = Modifier.fillMaxSize())
         if (viewState.showCreationToolbar) {
             HtmlEpubReaderAnnotationCreationToolbar(
                 viewState = viewState,
